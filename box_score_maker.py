@@ -130,7 +130,10 @@ def add_game_notes(pitcherTable,boxInfo):
 
 
 #Grab all of the games from the selected date and store the gameIDs.
-yesterdaysGames = statsapi.schedule(date='2024-06-13', team="", opponent="", sportId=1, game_id=None)
+
+gameDate = '2024-06-16'
+outputFileName = 'box_scores-' + gameDate
+yesterdaysGames = statsapi.schedule(date=gameDate, team="", opponent="", sportId=1, game_id=None)
 yesterdayGameIDs = []
 
 for item in yesterdaysGames:
@@ -180,7 +183,71 @@ for j in range(0,len(yesterdayGameIDs)):
     homePitcherTable = add_game_notes(homePitcherTable,data['gameBoxInfo'])
 
     #We're going to build two at a time, so the first one, we'll store in differently-named tables.
-    if j % 2 == 0:
+    if j == len(yesterdayGameIDs) - 1 and j % 2 == 0:
+        styled_html_table = f"""
+        <html>
+        <head>
+            <style>
+                .table-container {{
+                display: grid;
+                grid-template-columns: repeat(2, 1fr);
+                gap: 20px; /* Adjust the gap between columns */
+                }}
+                table {{ border-collapse: collapse;
+                        width: 100%}}
+                td, th {{ padding-top: 1px;
+                        padding-bottom: 1px;
+                        padding-left: 7px;
+                        padding-right: 7px;
+                        border: 0px solid black;
+                        font-size: 8px; /* Adjust font size as needed */
+                        font-family: 'Arial';
+                        word-wrap: break-word;
+                    overflow-wrap: break-word; }}
+                .nested-table {{
+                                width: 100%}}
+                .indented-cell {{
+                        padding-top: 1px;
+                        padding-bottom: 1px;
+                        padding-left: 12px;
+                        padding-right: 7px;
+                        border: 0px solid black;
+                        font-size: 8px; /* Adjust font size as needed */
+                        font-family: 'Arial';
+                        word-wrap: break-word;
+                    overflow-wrap: break-word;}}
+
+            </style>
+        </head>
+        <body>
+        <div class="table-container">
+        <table>
+        <tr><td class="nested-table">{lineScoreTable}</td></tr>
+        <tr><td class="nested-table">{roadBattingTable}</td></tr>
+        <tr><td class="nested-table">{homeBattingTable}</td></tr>
+        <tr><td class="nested-table">{roadPitcherTable}</td></tr>
+        <tr><td class="nested-table">{homePitcherTable}</td></tr>
+        <tr><td><br></td></tr>
+        <tr><td><br></td></tr>
+        </table>
+        <table>
+        <tr><td class="nested-table"></td></tr>
+        <tr><td class="nested-table"></td></tr>
+        <tr><td class="nested-table"></td></tr>
+        <tr><td class="nested-table"></td></tr>
+        <tr><td class="nested-table"></td></tr>
+        <tr><td><br></td></tr>
+        <tr><td><br></td></tr>
+        </table>
+        </div>
+        </body>
+        </html>
+        """
+
+        with open(outputFileName + '.html','a') as file:
+            file.write(styled_html_table)
+
+    elif j % 2 == 0:
         lineScoreTable2 = copy.deepcopy(lineScoreTable)
         homeBattingTable2 = copy.deepcopy(homeBattingTable)
         roadBattingTable2 = copy.deepcopy(roadBattingTable)
@@ -263,7 +330,7 @@ for j in range(0,len(yesterdayGameIDs)):
         del homePitcherTable2
 
         #Write the records to our HTML file.
-        with open('sampleBox.html','a') as file:
+        with open(outputFileName + '.html','a') as file:
             file.write(styled_html_table)
 
 #print(yesterdayGameIDs)
