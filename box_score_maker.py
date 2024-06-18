@@ -3,15 +3,165 @@ from tabulate import tabulate
 from bs4 import BeautifulSoup
 import statsapi
 import copy
+import re
 
-def parse_text_table(text_table):
-    #We need to make two-word team names into one name for these purposes.
-    text_table = text_table.replace('White Sox','WhiteSox')
-    text_table = text_table.replace('Red Sox','RedSox')
-    text_table = text_table.replace('Blue Jays','BlueJays')
-    lines = text_table.strip().split('\n')
-    data = [line.split() for line in lines]
-    return data
+boxScoreHTML = f"""
+        <html>
+        <head>
+            <style>
+                .table-container {{
+                display: grid;
+                grid-template-columns: repeat(2, 1fr);
+                gap: 20px; /* Adjust the gap between columns */
+                }}
+                table {{ border-collapse: collapse;
+                        width: 100%}}
+                td, th {{ padding-top: 0.1px;
+                        padding-bottom: 0.1px;
+                        padding-left: 5px;
+                        padding-right: 5px;
+                        border: 0px solid black;
+                        font-size: 9.5px; /* Adjust font size as needed */
+                        font-family: 'Arial';
+                        word-wrap: break-word;
+                    overflow-wrap: break-word; }}
+                .nested-table {{
+                                width: 100%}}
+                .indented-cell {{
+                        padding-left: 10px;}}
+
+            </style>
+        </head>
+        <body>
+        </body>
+        </html>
+        """
+class Inning:
+    def __init__(self):
+        self.inningNumber = 0
+        self.topRunsStart = 0
+        self.topRunsEnd = 0
+        self.bottomRunsStart = 0
+        self.bottomRunsEnd = 0
+
+def get_max_inning(a):
+    maxInning = 9
+    for item in a:
+        if item['about']['inning'] > maxInning:
+            maxInning = item['about']['inning']
+    return maxInning
+
+def log_runs(a,b):
+    for item in a:
+        checkInning = item['about']['inning']
+        if item['result']['awayScore'] > b[checkInning].topRunsEnd:
+            b[checkInning].topRunsEnd = item['result']['awayScore']
+        if item['result']['homeScore'] > b[checkInning].bottomRunsEnd:
+            b[checkInning].bottomRunsEnd = item['result']['homeScore']
+    return b
+
+def clean_table(a):
+    keyList = []
+    for key in a:
+        keyList.append(key)
+    for i in range(1,len(keyList)):
+        if a[i].topRunsStart > a[i].topRunsEnd:
+            a[i].topRunsEnd = a[i].topRunsStart
+        if a[i].bottomRunsStart > a[i].bottomRunsEnd:
+            a[i].bottomRunsEnd = a[i].bottomRunsStart
+        if a[i].topRunsEnd > a[i + 1].topRunsStart:
+            a[i + 1].topRunsStart = a[i].topRunsEnd
+        if a[i].bottomRunsEnd > a[i + 1].bottomRunsStart:
+            a[i + 1].bottomRunsStart = a[i].bottomRunsEnd
+        finalInning = i + 1
+    if a[finalInning].topRunsStart > a[finalInning].topRunsEnd:
+        a[finalInning].topRunsEnd = a[finalInning].topRunsStart
+    if a[finalInning].bottomRunsStart > a[finalInning].bottomRunsEnd:
+        a[finalInning].bottomRunsEnd = a[finalInning].bottomRunsStart
+    return a
+
+def make_linescore(a,road_team,home_team):
+    linescoreLOL = []
+    linescoreList = [""]
+    roadList = [road_team]
+    homeList = [home_team]
+    for key in a:
+        linescoreList.append(a[key].inningNumber)
+        roadList.append(a[key].topRunsEnd - a[key].topRunsStart)
+        homeList.append(a[key].bottomRunsEnd - a[key].bottomRunsStart)
+    linescoreLOL.append(linescoreList)
+    linescoreLOL.append(roadList)
+    linescoreLOL.append(homeList)
+    return linescoreLOL
+
+def add_totals_to_linescore(linescore,a):
+    linescore[0].append("R")
+    linescore[1].append(a['away']['teamStats']['batting']['runs'])
+    linescore[2].append(a['home']['teamStats']['batting']['runs'])
+    linescore[0].append("H")
+    linescore[1].append(a['away']['teamStats']['batting']['hits'])
+    linescore[2].append(a['home']['teamStats']['batting']['hits'])
+    linescore[0].append("E")
+    linescore[1].append(figure_out_team_errors(a['away']['info']))
+    linescore[2].append(figure_out_team_errors(a['home']['info']))
+    return linescore
+
+def extract_and_clean_parentheses_text(input_string):
+    # Find all text within parentheses
+    pattern = r'\(([^)]*)\)'
+    matches = re.findall(pattern, input_string)
+
+    cleaned_matches = []
+    for match in matches:
+        # Split the text at the first comma and take the second part (if exists)
+        parts = match.split(',', 1)
+        if len(parts) > 1:
+            cleaned_matches.append(parts[1].strip())
+        else:
+            cleaned_matches.append(parts[0].strip())
+
+    # Join the cleaned matches into a single string
+    result = ' '.join(cleaned_matches)
+    return result
+
+def figure_out_team_errors(a):
+    hasErrors = 0
+    i = 0
+    for item in a:
+        if item['title'] == 'FIELDING':
+            for item2 in item['fieldList']:
+                if item2['label'] == 'E':
+                    errorData = item2['value']
+                    hasErrors = 1
+    if hasErrors == 0:
+        return(0)
+    else:
+        return(len(extract_and_clean_parentheses_text(errorData).split(" ")))
+
+def merge_html(html_base, new_html):
+    # Parse both input HTML strings
+    soup1 = BeautifulSoup(html_base, 'html.parser')
+    soup2 = BeautifulSoup(new_html, 'html.parser')
+
+    # Create a new BeautifulSoup object with a basic HTML structure
+    new_soup = BeautifulSoup('<html><head></head><body></body></html>', 'html.parser')
+
+    # Handle the <head> section, using the <head> from soup1
+    if soup1.head:
+        new_soup.head.replace_with(soup1.head)
+
+    # Extract <body> contents from both soups
+    body1 = soup1.body
+    body2 = soup2.body
+
+    # Merge the body contents
+    if body1:
+        new_soup.body.extend(body1.contents)
+    if body2:
+        new_soup.body.extend(body2.contents)
+
+    # Return the string representation of the merged HTML
+    return str(new_soup)
 
 #Some BeautifulSoup-driven functions to modify our HTML.
 
@@ -66,7 +216,8 @@ def create_boxscore_row(myItem):
     myRow.append(myItem['bb'])
     myRow.append(myItem['k'])
     myRow.append(myItem['avg'])
-    myRow.append(myItem['ops'])
+    myRow.append(myItem['obp'])
+    myRow.append(myItem['slg'])
     return myRow
 
 def create_pitcher_row(myItem):
@@ -131,7 +282,7 @@ def add_game_notes(pitcherTable,boxInfo):
 
 #Grab all of the games from the selected date and store the gameIDs.
 
-gameDate = '2024-06-16'
+gameDate = '2024-06-17'
 outputFileName = 'box_scores-' + gameDate
 yesterdaysGames = statsapi.schedule(date=gameDate, team="", opponent="", sportId=1, game_id=None)
 yesterdayGameIDs = []
@@ -149,8 +300,8 @@ for j in range(0,len(yesterdayGameIDs)):
     myLineScore = statsapi.linescore(gameID)
 
     #Convert the line score into a text table via tabulate.
-    myLineScoreLOL = parse_text_table(myLineScore)
-    lineScoreTable = tabulate(myLineScoreLOL, tablefmt='html', headers="firstrow")
+    #myLineScoreLOL = parse_text_table(myLineScore)
+    #lineScoreTable = tabulate(myLineScoreLOL, tablefmt='html', headers="firstrow")
 
     #Get team info.
     away_team = data['teamInfo']['away']['shortName']
@@ -182,43 +333,28 @@ for j in range(0,len(yesterdayGameIDs)):
     #We have to add the game notes somewhere.
     homePitcherTable = add_game_notes(homePitcherTable,data['gameBoxInfo'])
 
+    #Line Score next.
+    gameScoring = statsapi.game_scoring_play_data(gameID)
+    myMaxInning = get_max_inning(gameScoring['plays'])
+
+    inningDetails = {}
+
+    for i in range(0,myMaxInning):
+        inningDetails[i + 1] = Inning()
+        inningDetails[i + 1].inningNumber = i + 1
+
+    inningDetails = log_runs(gameScoring['plays'],inningDetails)
+    inningDetails = clean_table(inningDetails)
+
+    myLineScore = make_linescore(inningDetails,away_team,home_team)
+    myLineScore = add_totals_to_linescore(myLineScore,data)
+    lineScoreTable = tabulate(myLineScore, tablefmt='html', headers="firstrow")
+
     #We're going to build two at a time, so the first one, we'll store in differently-named tables.
     if j == len(yesterdayGameIDs) - 1 and j % 2 == 0:
-        styled_html_table = f"""
+        additionalHTML = f"""Mets
         <html>
-        <head>
-            <style>
-                .table-container {{
-                display: grid;
-                grid-template-columns: repeat(2, 1fr);
-                gap: 20px; /* Adjust the gap between columns */
-                }}
-                table {{ border-collapse: collapse;
-                        width: 100%}}
-                td, th {{ padding-top: 1px;
-                        padding-bottom: 1px;
-                        padding-left: 7px;
-                        padding-right: 7px;
-                        border: 0px solid black;
-                        font-size: 8px; /* Adjust font size as needed */
-                        font-family: 'Arial';
-                        word-wrap: break-word;
-                    overflow-wrap: break-word; }}
-                .nested-table {{
-                                width: 100%}}
-                .indented-cell {{
-                        padding-top: 1px;
-                        padding-bottom: 1px;
-                        padding-left: 12px;
-                        padding-right: 7px;
-                        border: 0px solid black;
-                        font-size: 8px; /* Adjust font size as needed */
-                        font-family: 'Arial';
-                        word-wrap: break-word;
-                    overflow-wrap: break-word;}}
-
-            </style>
-        </head>
+        <head></head>
         <body>
         <div class="table-container">
         <table>
@@ -243,9 +379,7 @@ for j in range(0,len(yesterdayGameIDs)):
         </body>
         </html>
         """
-
-        with open(outputFileName + '.html','a') as file:
-            file.write(styled_html_table)
+        boxScoreHTML = merge_html(boxScoreHTML,additionalHTML)
 
     elif j % 2 == 0:
         lineScoreTable2 = copy.deepcopy(lineScoreTable)
@@ -257,41 +391,9 @@ for j in range(0,len(yesterdayGameIDs)):
 
     #This is how we're going to build the HTML.
     #There are a few things in here: table-container allows us to do two columns, and the "indented-cell" allows for indentation.
-        styled_html_table = f"""
+        additionalHTML = f"""
         <html>
-        <head>
-            <style>
-                .table-container {{
-                display: grid;
-                grid-template-columns: repeat(2, 1fr);
-                gap: 20px; /* Adjust the gap between columns */
-                }}
-                table {{ border-collapse: collapse;
-                        width: 100%}}
-                td, th {{ padding-top: 1px;
-                        padding-bottom: 1px;
-                        padding-left: 7px;
-                        padding-right: 7px;
-                        border: 0px solid black;
-                        font-size: 8px; /* Adjust font size as needed */
-                        font-family: 'Arial';
-                        word-wrap: break-word;
-                    overflow-wrap: break-word; }}
-                .nested-table {{
-                                width: 100%}}
-                .indented-cell {{
-                        padding-top: 1px;
-                        padding-bottom: 1px;
-                        padding-left: 12px;
-                        padding-right: 7px;
-                        border: 0px solid black;
-                        font-size: 8px; /* Adjust font size as needed */
-                        font-family: 'Arial';
-                        word-wrap: break-word;
-                    overflow-wrap: break-word;}}
-
-            </style>
-        </head>
+        <head></head>
         <body>
         <div class="table-container">
         <table>
@@ -330,27 +432,7 @@ for j in range(0,len(yesterdayGameIDs)):
         del homePitcherTable2
 
         #Write the records to our HTML file.
-        with open(outputFileName + '.html','a') as file:
-            file.write(styled_html_table)
+        boxScoreHTML = merge_html(boxScoreHTML,additionalHTML)
 
-#print(yesterdayGameIDs)
-
-# Load the JSON data
-#with open('myJSON.json') as f:
-#    data = json.load(f)
-
-# class Player:
-#     def __init__(self,a):
-#         self.isHome = ''
-#         self.playerID = a['person']['id']
-#         self.fullName = a['person']['fullName']
-#         self.position = a['position']
-#         self.battingOrder = ''
-#         self.gameBattingStats = a['stats']['batting']
-#         self.seasonBattingStats = a['seasonStats']['batting']
-#         self.gamePitchingStats = a['stats']['pitching']
-#         self.seasonPitchingStats = a['seasonStats']['pitching']
-
-    # away_score = data['away']['teamStats']['batting']['runs']
-    # home_score = data['home']['teamStats']['batting']['runs']
-    #
+with open(outputFileName + '.html','w') as file:
+    file.write(boxScoreHTML)
