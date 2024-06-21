@@ -5,6 +5,183 @@ import statsapi
 import copy
 import re
 
+gameDate = '06/20/2024'
+standingsData = statsapi.standings_data(date=gameDate)
+
+def merge_html(html_base, new_html):
+    # Parse both input HTML strings
+    soup1 = BeautifulSoup(html_base, 'html.parser')
+    soup2 = BeautifulSoup(new_html, 'html.parser')
+
+    # Create a new BeautifulSoup object with a basic HTML structure
+    new_soup = BeautifulSoup('<html><head></head><body></body></html>', 'html.parser')
+
+    # Handle the <head> section, using the <head> from soup1
+    if soup1.head:
+        new_soup.head.replace_with(soup1.head)
+
+    # Extract <body> contents from both soups
+    body1 = soup1.body
+    body2 = soup2.body
+
+    # Merge the body contents
+    if body1:
+        new_soup.body.extend(body1.contents)
+    if body2:
+        new_soup.body.extend(body2.contents)
+
+    # Return the string representation of the merged HTML
+    return str(new_soup)
+
+divisionDict = {200: "AL West",
+                201: "AL East",
+                202: "AL Central",
+                203: "NL West",
+                204: "NL East",
+                205: "NL Central"}
+
+standingsDict = {}
+
+def build_standings_group(a):
+    standingsLOL = []
+    for item in a:
+        standingsRow = []
+        standingsRow.append(item['name'])
+        standingsRow.append(item['w'])
+        standingsRow.append(item['l'])
+        standingsRow.append(str(f"{item['w'] / (item['w'] + item['l']):.3f}")[1:])
+        standingsRow.append(item['gb'])
+        standingsRow.append(item['wc_gb'])
+        standingsLOL.append(standingsRow)
+    return standingsLOL
+
+def build_wild_card_group(a,b,c):
+    standingsLOL = []
+    for item in a:
+        #if item[5] != '-':
+        standingsLOL.append(item)
+    for item in b:
+        #if item[5] != '-':
+        standingsLOL.append(item)
+    for item in c:
+        #if item[5] != '-':
+        standingsLOL.append(item)
+    return standingsLOL
+
+def generate_HTML_standings_table(a):
+    html = '<table>\n'
+    for i in a:
+        if (i[0][0:2] == "AL") or (i[0][0:2] == "NL"):
+                html += '<tr class="special-row">\n'
+        else:
+            html += '<tr>'
+        for j in i:
+            html += f'<td>{j}</td>\n'
+        html += '</tr>\n'
+    html += '</table>'
+    return html
+
+def append_lists_of_lists(list1, list2):
+    # Append each sublist in list2 to list1
+    for sublist in list2:
+        list1.append(sublist)
+    return list1
+
+def sort_list_of_lists(lists, key_index=0, descending=True):
+    """
+    Sorts a list of lists based on a specified key index.
+
+    Parameters:
+    lists (list of lists): The list of lists to be sorted.
+    key_index (int): The index of the element in the inner lists to sort by.
+    descending (bool): Whether to sort in descending order.
+
+    Returns:
+    list of lists: The sorted list of lists.
+    """
+    return sorted(lists, key=lambda x: x[key_index], reverse=descending)
+
+def build_standings_html_table(myStandings,x):
+    standingsLOL = []
+    if x == "NL":
+        standingsHeader = build_standings_headers(myStandings,"NL East")
+        standingsLOL.append(standingsHeader)
+        for item in standingsDict[204]:
+            newItem = list(item)
+            newItem.pop(5)
+            standingsLOL.append(newItem)
+        standingsHeader = build_standings_headers(myStandings,"NL Central")
+        standingsLOL.append(standingsHeader)
+        for item in standingsDict[205]:
+            newItem = list(item)
+            newItem.pop(5)
+            standingsLOL.append(newItem)
+        standingsHeader = build_standings_headers(myStandings,"NL West")
+        standingsLOL.append(standingsHeader)
+        for item in standingsDict[203]:
+            newItem = list(item)
+            newItem.pop(5)
+            standingsLOL.append(newItem)
+        standingsHeader = build_standings_headers(myStandings,"NL Wild Card")
+        standingsLOL.append(standingsHeader)
+        for item in standingsDict['nlwc']:
+            item.pop(4)
+            standingsLOL.append(item)
+    else:
+        standingsHeader = build_standings_headers(myStandings,"AL East")
+        standingsLOL.append(standingsHeader)
+        for item in standingsDict[201]:
+            newItem = list(item)
+            newItem.pop(5)
+            standingsLOL.append(newItem)
+        standingsHeader = build_standings_headers(myStandings,"AL Central")
+        standingsLOL.append(standingsHeader)
+        for item in standingsDict[202]:
+            newItem = list(item)
+            newItem.pop(5)
+            standingsLOL.append(newItem)
+        standingsHeader = build_standings_headers(myStandings,"AL West")
+        standingsLOL.append(standingsHeader)
+        for item in standingsDict[200]:
+            newItem = list(item)
+            newItem.pop(5)
+            standingsLOL.append(newItem)
+        standingsHeader = build_standings_headers(myStandings,"AL Wild Card")
+        standingsLOL.append(standingsHeader)
+        for item in standingsDict['alwc']:
+            item.pop(4)
+            standingsLOL.append(item)
+    return standingsLOL
+
+def build_standings_headers(a,b):
+    a = []
+    a.append(b)
+    a.append('W')
+    a.append('L')
+    a.append('WP')
+    a.append('GB')
+    return a
+
+for keys in divisionDict:
+    standingsDict[keys] = build_standings_group(standingsData[keys]['teams'])
+
+wildCardStandings = build_wild_card_group(standingsDict[200],standingsDict[201],standingsDict[202])
+wildCardStandings = sort_list_of_lists(wildCardStandings,3)
+standingsDict['alwc'] = wildCardStandings
+standingsAL = (build_standings_html_table(standingsDict,"AL"))
+standingsALHTML = generate_HTML_standings_table(standingsAL)
+print("Logging AL Standings")
+
+wildCardStandings = build_wild_card_group(standingsDict[203],standingsDict[204],standingsDict[205])
+wildCardStandings = sort_list_of_lists(wildCardStandings,3)
+standingsDict['nlwc'] = wildCardStandings
+standingsNL = (build_standings_html_table(standingsDict,"NL"))
+standingsNLHTML = generate_HTML_standings_table(standingsNL)
+print("Logging NL Standings")
+
+#print(standingsTable)
+#sampleStandings = tabulate(standingsTable, tablefmt='html')
+
 boxScoreHTML = f"""
         <html>
         <head>
@@ -29,13 +206,23 @@ boxScoreHTML = f"""
                                 width: 100%}}
                 .indented-cell {{
                         padding-left: 10px;}}
-
+                .special-row {{
+                                  font-weight: bold}}
             </style>
         </head>
         <body>
+        <div class="table-container">
+        <table>
+        <tr><td class="nested-standings-table">{standingsALHTML}</td></tr>
+        </table>
+        <table>
+        <tr><td class="nested-standings-table">{standingsNLHTML}</td></tr>
+        </table>
+        <br>
         </body>
         </html>
         """
+
 class Inning:
     def __init__(self):
         self.inningNumber = 0
@@ -108,6 +295,7 @@ def add_totals_to_linescore(linescore,a):
 
 def extract_and_clean_parentheses_text(input_string):
     # Find all text within parentheses
+    input_string = error_cleanup(input_string)
     pattern = r'\(([^)]*)\)'
     matches = re.findall(pattern, input_string)
 
@@ -123,6 +311,10 @@ def extract_and_clean_parentheses_text(input_string):
     # Join the cleaned matches into a single string
     result = ' '.join(cleaned_matches)
     return result
+
+def error_cleanup(a):
+    a = a.replace("catcher interference","CI")
+    return a
 
 def figure_out_team_errors(a):
     hasErrors = 0
@@ -281,9 +473,8 @@ def add_game_notes(pitcherTable,boxInfo):
 
 
 #Grab all of the games from the selected date and store the gameIDs.
-
-gameDate = '2024-06-17'
-outputFileName = 'box_scores-' + gameDate
+gameDateOutput = gameDate.replace("/","-")
+outputFileName = 'box_scores-' + gameDateOutput
 yesterdaysGames = statsapi.schedule(date=gameDate, team="", opponent="", sportId=1, game_id=None)
 yesterdayGameIDs = []
 
