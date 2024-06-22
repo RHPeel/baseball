@@ -5,7 +5,7 @@ import statsapi
 import copy
 import re
 
-gameDate = '06/20/2024'
+gameDate = '06/21/2024'
 standingsData = statsapi.standings_data(date=gameDate)
 
 def merge_html(html_base, new_html):
@@ -51,7 +51,10 @@ def build_standings_group(a):
         standingsRow.append(item['l'])
         standingsRow.append(str(f"{item['w'] / (item['w'] + item['l']):.3f}")[1:])
         standingsRow.append(item['gb'])
-        standingsRow.append(item['wc_gb'])
+        if item['div_rank'] != '1':
+            standingsRow.append(item['wc_gb'])
+        else:
+            standingsRow.append("xxxx")
         standingsLOL.append(standingsRow)
     return standingsLOL
 
@@ -59,13 +62,14 @@ def build_wild_card_group(a,b,c):
     standingsLOL = []
     for item in a:
         #if item[5] != '-':
-        standingsLOL.append(item)
+        if item[5] != "xxxx":
+            standingsLOL.append(item)
     for item in b:
-        #if item[5] != '-':
-        standingsLOL.append(item)
+        if item[5] != "xxxx":
+            standingsLOL.append(item)
     for item in c:
-        #if item[5] != '-':
-        standingsLOL.append(item)
+        if item[5] != "xxxx":
+            standingsLOL.append(item)
     return standingsLOL
 
 def generate_HTML_standings_table(a):
