@@ -5,9 +5,13 @@ import statsapi
 import copy
 import re
 
-gameDate = '06/21/2024'
+#input today's date here.'
+gameDate = '06/22/2024'
+
+#grab the standings data from the API.
 standingsData = statsapi.standings_data(date=gameDate)
 
+#This function combines two HTML files. We'll use this to build out the list of boxscores.'
 def merge_html(html_base, new_html):
     # Parse both input HTML strings
     soup1 = BeautifulSoup(html_base, 'html.parser')
@@ -33,6 +37,7 @@ def merge_html(html_base, new_html):
     # Return the string representation of the merged HTML
     return str(new_soup)
 
+#This dictionary links IDs from the standings API to actual division names.
 divisionDict = {200: "AL West",
                 201: "AL East",
                 202: "AL Central",
@@ -40,8 +45,10 @@ divisionDict = {200: "AL West",
                 204: "NL East",
                 205: "NL Central"}
 
+#We'll store the standings here.'
 standingsDict = {}
 
+#This function takes the input from the standings, by division, and makes it into a list-of-lists.
 def build_standings_group(a):
     standingsLOL = []
     for item in a:
@@ -49,8 +56,11 @@ def build_standings_group(a):
         standingsRow.append(item['name'])
         standingsRow.append(item['w'])
         standingsRow.append(item['l'])
+        #We're calculating winning percentage, leaving off the leading 0. and rounding to 3 digits.
         standingsRow.append(str(f"{item['w'] / (item['w'] + item['l']):.3f}")[1:])
         standingsRow.append(item['gb'])
+        #Key part here is for later exclusion from the wild card grouping.
+        #First place teams are excluded from the wild card grouping.
         if item['div_rank'] != '1':
             standingsRow.append(item['wc_gb'])
         else:
@@ -58,6 +68,8 @@ def build_standings_group(a):
         standingsLOL.append(standingsRow)
     return standingsLOL
 
+#This takes the three divisions as inputs and adds everything to a new "wild card" group.
+#But... if we see that "xxxx" we know NOT to include it in the wild card set.
 def build_wild_card_group(a,b,c):
     standingsLOL = []
     for item in a:
@@ -72,6 +84,8 @@ def build_wild_card_group(a,b,c):
             standingsLOL.append(item)
     return standingsLOL
 
+#This is a simple procedure to write the HTML table, but it adds a "special row" class to the headers.
+#Special row is just bolded text, but it's all handled via stylesheet.'
 def generate_HTML_standings_table(a):
     html = '<table>\n'
     for i in a:
@@ -85,12 +99,14 @@ def generate_HTML_standings_table(a):
     html += '</table>'
     return html
 
+#Very simple utility to merge two lists of lists into a single list-of-lists.
 def append_lists_of_lists(list1, list2):
     # Append each sublist in list2 to list1
     for sublist in list2:
         list1.append(sublist)
     return list1
 
+#Sort procedure. We use this to sort by winning percentage.
 def sort_list_of_lists(lists, key_index=0, descending=True):
     """
     Sorts a list of lists based on a specified key index.
@@ -105,58 +121,38 @@ def sort_list_of_lists(lists, key_index=0, descending=True):
     """
     return sorted(lists, key=lambda x: x[key_index], reverse=descending)
 
+def remove_extra_gb(a,b):
+    newItem = list(a)
+    newItem.pop(b)
+    return newItem
+
+#We're leaning on the divisionCodes to loop through in building a standings table.'
 def build_standings_html_table(myStandings,x):
     standingsLOL = []
+    divisionCodes = [201,202,200]
     if x == "NL":
-        standingsHeader = build_standings_headers(myStandings,"NL East")
-        standingsLOL.append(standingsHeader)
-        for item in standingsDict[204]:
-            newItem = list(item)
-            newItem.pop(5)
-            standingsLOL.append(newItem)
-        standingsHeader = build_standings_headers(myStandings,"NL Central")
-        standingsLOL.append(standingsHeader)
-        for item in standingsDict[205]:
-            newItem = list(item)
-            newItem.pop(5)
-            standingsLOL.append(newItem)
-        standingsHeader = build_standings_headers(myStandings,"NL West")
-        standingsLOL.append(standingsHeader)
-        for item in standingsDict[203]:
-            newItem = list(item)
-            newItem.pop(5)
-            standingsLOL.append(newItem)
+        for division in divisionCodes:
+            standingsHeader = build_standings_headers(myStandings,divisionDict[division + 3])
+            standingsLOL.append(standingsHeader)
+            for item in myStandings[division + 3]:
+                standingsLOL.append(remove_extra_gb(item,5))
         standingsHeader = build_standings_headers(myStandings,"NL Wild Card")
         standingsLOL.append(standingsHeader)
-        for item in standingsDict['nlwc']:
-            item.pop(4)
-            standingsLOL.append(item)
+        for item in myStandings['nlwc']:
+            standingsLOL.append(remove_extra_gb(item,4))
     else:
-        standingsHeader = build_standings_headers(myStandings,"AL East")
+        for division in divisionCodes:
+            standingsHeader = build_standings_headers(myStandings,divisionDict[division])
+            standingsLOL.append(standingsHeader)
+            for item in myStandings[division]:
+                standingsLOL.append(remove_extra_gb(item,5))
+        standingsHeader = build_standings_headers(myStandings,"NL Wild Card")
         standingsLOL.append(standingsHeader)
-        for item in standingsDict[201]:
-            newItem = list(item)
-            newItem.pop(5)
-            standingsLOL.append(newItem)
-        standingsHeader = build_standings_headers(myStandings,"AL Central")
-        standingsLOL.append(standingsHeader)
-        for item in standingsDict[202]:
-            newItem = list(item)
-            newItem.pop(5)
-            standingsLOL.append(newItem)
-        standingsHeader = build_standings_headers(myStandings,"AL West")
-        standingsLOL.append(standingsHeader)
-        for item in standingsDict[200]:
-            newItem = list(item)
-            newItem.pop(5)
-            standingsLOL.append(newItem)
-        standingsHeader = build_standings_headers(myStandings,"AL Wild Card")
-        standingsLOL.append(standingsHeader)
-        for item in standingsDict['alwc']:
-            item.pop(4)
-            standingsLOL.append(item)
+        for item in myStandings['alwc']:
+            standingsLOL.append(remove_extra_gb(item,4))
     return standingsLOL
 
+#This builds the headers for each standings group.
 def build_standings_headers(a,b):
     a = []
     a.append(b)
@@ -166,67 +162,8 @@ def build_standings_headers(a,b):
     a.append('GB')
     return a
 
-for keys in divisionDict:
-    standingsDict[keys] = build_standings_group(standingsData[keys]['teams'])
-
-wildCardStandings = build_wild_card_group(standingsDict[200],standingsDict[201],standingsDict[202])
-wildCardStandings = sort_list_of_lists(wildCardStandings,3)
-standingsDict['alwc'] = wildCardStandings
-standingsAL = (build_standings_html_table(standingsDict,"AL"))
-standingsALHTML = generate_HTML_standings_table(standingsAL)
-print("Logging AL Standings")
-
-wildCardStandings = build_wild_card_group(standingsDict[203],standingsDict[204],standingsDict[205])
-wildCardStandings = sort_list_of_lists(wildCardStandings,3)
-standingsDict['nlwc'] = wildCardStandings
-standingsNL = (build_standings_html_table(standingsDict,"NL"))
-standingsNLHTML = generate_HTML_standings_table(standingsNL)
-print("Logging NL Standings")
-
-#print(standingsTable)
-#sampleStandings = tabulate(standingsTable, tablefmt='html')
-
-boxScoreHTML = f"""
-        <html>
-        <head>
-            <style>
-                .table-container {{
-                display: grid;
-                grid-template-columns: repeat(2, 1fr);
-                gap: 20px; /* Adjust the gap between columns */
-                }}
-                table {{ border-collapse: collapse;
-                        width: 100%}}
-                td, th {{ padding-top: 0.1px;
-                        padding-bottom: 0.1px;
-                        padding-left: 5px;
-                        padding-right: 5px;
-                        border: 0px solid black;
-                        font-size: 9.5px; /* Adjust font size as needed */
-                        font-family: 'Arial';
-                        word-wrap: break-word;
-                    overflow-wrap: break-word; }}
-                .nested-table {{
-                                width: 100%}}
-                .indented-cell {{
-                        padding-left: 10px;}}
-                .special-row {{
-                                  font-weight: bold}}
-            </style>
-        </head>
-        <body>
-        <div class="table-container">
-        <table>
-        <tr><td class="nested-standings-table">{standingsALHTML}</td></tr>
-        </table>
-        <table>
-        <tr><td class="nested-standings-table">{standingsNLHTML}</td></tr>
-        </table>
-        <br>
-        </body>
-        </html>
-        """
-
+#We use this class for building out the line score.
+#Each inning gets a "start" and "stop" score. The difference between those two goes into the line score.
 class Inning:
     def __init__(self):
         self.inningNumber = 0
@@ -235,6 +172,8 @@ class Inning:
         self.bottomRunsStart = 0
         self.bottomRunsEnd = 0
 
+#Figure out if the game went to extra innings.
+#Note that as of now we assume ALL games go at least 9, even rain-shortened games.
 def get_max_inning(a):
     maxInning = 9
     for item in a:
@@ -242,6 +181,7 @@ def get_max_inning(a):
             maxInning = item['about']['inning']
     return maxInning
 
+#Go through each inning and build the line score.
 def log_runs(a,b):
     for item in a:
         checkInning = item['about']['inning']
@@ -251,6 +191,7 @@ def log_runs(a,b):
             b[checkInning].bottomRunsEnd = item['result']['homeScore']
     return b
 
+#This catches anything that our iterative processe misses.
 def clean_table(a):
     keyList = []
     for key in a:
@@ -269,8 +210,12 @@ def clean_table(a):
         a[finalInning].topRunsEnd = a[finalInning].topRunsStart
     if a[finalInning].bottomRunsStart > a[finalInning].bottomRunsEnd:
         a[finalInning].bottomRunsEnd = a[finalInning].bottomRunsStart
+    if a[9].topRunsEnd < a[9].bottomRunsStart:
+        a[9].bottomRunsStart = 'x'
+        a[9].bottomRunsEnd = 'x'
     return a
 
+#Actually builds the inning totals.
 def make_linescore(a,road_team,home_team):
     linescoreLOL = []
     linescoreList = [""]
@@ -279,12 +224,20 @@ def make_linescore(a,road_team,home_team):
     for key in a:
         linescoreList.append(a[key].inningNumber)
         roadList.append(a[key].topRunsEnd - a[key].topRunsStart)
-        homeList.append(a[key].bottomRunsEnd - a[key].bottomRunsStart)
+        if key != 9:
+            homeList.append(a[key].bottomRunsEnd - a[key].bottomRunsStart)
+        else:
+            if a[key].bottomRunsStart == 'x':
+                homeList.append('x')
+            else:
+                homeList.append(a[key].bottomRunsEnd - a[key].bottomRunsStart)
+
     linescoreLOL.append(linescoreList)
     linescoreLOL.append(roadList)
     linescoreLOL.append(homeList)
     return linescoreLOL
 
+#We need actual totals added.
 def add_totals_to_linescore(linescore,a):
     linescore[0].append("R")
     linescore[1].append(a['away']['teamStats']['batting']['runs'])
@@ -296,6 +249,22 @@ def add_totals_to_linescore(linescore,a):
     linescore[1].append(figure_out_team_errors(a['away']['info']))
     linescore[2].append(figure_out_team_errors(a['home']['info']))
     return linescore
+
+def fix_linescore_html(myLinescoreTable):
+    soup = BeautifulSoup(myLinescoreTable, 'html.parser')
+
+    # Find all <td> elements containing '***'
+    for td in soup.find_all('td'):
+        if td.get_text(strip=True).isnumeric() or td.get_text(strip=True) == 'x':
+            td['style'] = "text-align: right;"
+    for th in soup.find_all('th'):
+        if th.get_text(strip=True).isnumeric() or th.get_text(strip=True) == 'x':
+            th['style'] = "text-align: right;"
+
+    # Return the modified HTML table as a string
+    return str(soup)
+
+#Need to 1) Take existing table; 2) Run it through soup; 3) Model on add_indent_to_asterisk_cells_in_table.
 
 def extract_and_clean_parentheses_text(input_string):
     # Find all text within parentheses
@@ -482,6 +451,66 @@ outputFileName = 'box_scores-' + gameDateOutput
 yesterdaysGames = statsapi.schedule(date=gameDate, team="", opponent="", sportId=1, game_id=None)
 yesterdayGameIDs = []
 
+for keys in divisionDict:
+    standingsDict[keys] = build_standings_group(standingsData[keys]['teams'])
+
+wildCardStandings = build_wild_card_group(standingsDict[200],standingsDict[201],standingsDict[202])
+wildCardStandings = sort_list_of_lists(wildCardStandings,3)
+standingsDict['alwc'] = wildCardStandings
+standingsAL = (build_standings_html_table(standingsDict,"AL"))
+standingsALHTML = generate_HTML_standings_table(standingsAL)
+print("Logging AL Standings")
+
+wildCardStandings = build_wild_card_group(standingsDict[203],standingsDict[204],standingsDict[205])
+wildCardStandings = sort_list_of_lists(wildCardStandings,3)
+standingsDict['nlwc'] = wildCardStandings
+standingsNL = (build_standings_html_table(standingsDict,"NL"))
+standingsNLHTML = generate_HTML_standings_table(standingsNL)
+print("Logging NL Standings")
+
+#This is the initial HTML template. Note that it will include our style sheet.
+#It also includes the standings tables to start.
+boxScoreHTML = f"""
+        <html>
+        <head>
+            <style>
+                .table-container {{
+                display: grid;
+                grid-template-columns: repeat(2, 1fr);
+                gap: 20px; /* Adjust the gap between columns */
+                }}
+                table {{ border-collapse: collapse;
+                        width: 100%}}
+                td, th {{ padding-top: 0.1px;
+                        padding-bottom: 0.1px;
+                        padding-left: 5px;
+                        padding-right: 5px;
+                        border: 0px solid black;
+                        font-size: 9.5px; /* Adjust font size as needed */
+                        font-family: 'Arial';
+                        word-wrap: break-word;
+                    overflow-wrap: break-word; }}
+                .nested-table {{
+                                width: 100%}}
+                .indented-cell {{
+                        padding-left: 10px;}}
+                .special-row {{
+                                  font-weight: bold}}
+            </style>
+        </head>
+        <body>
+        <div class="table-container">
+        <table>
+        <tr><td class="nested-standings-table">{standingsALHTML}</td></tr>
+        </table>
+        <table>
+        <tr><td class="nested-standings-table">{standingsNLHTML}</td></tr>
+        </table>
+        <br>
+        </body>
+        </html>
+        """
+
 for item in yesterdaysGames:
     yesterdayGameIDs.append(item['game_id'])
 
@@ -544,6 +573,7 @@ for j in range(0,len(yesterdayGameIDs)):
     myLineScore = make_linescore(inningDetails,away_team,home_team)
     myLineScore = add_totals_to_linescore(myLineScore,data)
     lineScoreTable = tabulate(myLineScore, tablefmt='html', headers="firstrow")
+    lineScoreTable = fix_linescore_html(lineScoreTable)
 
     #We're going to build two at a time, so the first one, we'll store in differently-named tables.
     if j == len(yesterdayGameIDs) - 1 and j % 2 == 0:
