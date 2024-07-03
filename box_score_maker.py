@@ -6,7 +6,7 @@ import copy
 import re
 
 #input today's date here.'
-gameDate = '06/22/2024'
+gameDate = '07/02/2024'
 
 #grab the standings data from the API.
 standingsData = statsapi.standings_data(date=gameDate)
@@ -250,21 +250,16 @@ def add_totals_to_linescore(linescore,a):
     linescore[2].append(figure_out_team_errors(a['home']['info']))
     return linescore
 
+#Need to correct the 9th inning values to make sure they're right-adjusted.
 def fix_linescore_html(myLinescoreTable):
     soup = BeautifulSoup(myLinescoreTable, 'html.parser')
-
-    # Find all <td> elements containing '***'
     for td in soup.find_all('td'):
         if td.get_text(strip=True).isnumeric() or td.get_text(strip=True) == 'x':
             td['style'] = "text-align: right;"
     for th in soup.find_all('th'):
         if th.get_text(strip=True).isnumeric() or th.get_text(strip=True) == 'x':
             th['style'] = "text-align: right;"
-
-    # Return the modified HTML table as a string
     return str(soup)
-
-#Need to 1) Take existing table; 2) Run it through soup; 3) Model on add_indent_to_asterisk_cells_in_table.
 
 def extract_and_clean_parentheses_text(input_string):
     # Find all text within parentheses
@@ -368,12 +363,25 @@ def add_indent_to_asterisk_cells_in_table(html_table):
     # Return the modified HTML table as a string
     return str(soup)
 
-def create_boxscore_row(myItem):
+def create_boxscore_row(myItem,myPositions):
     myRow = []
     if myItem['substitution']:
-        myRow.append("***" + myItem['namefield'])
+        nameField = "***" + myItem['namefield']
     else:
-        myRow.append(myItem['namefield'])
+        nameField = myItem['namefield']
+    newPositions = ''
+    if len(myPositions) > 1 and nameField != 'Totals':
+        nameFieldList = nameField.split(" ")
+        nameFieldList.pop()
+        for item in myPositions:
+            newPositions = newPositions + item['abbreviation'] + '-'
+        nameFieldList.append(newPositions)
+        nameField = ''
+        #print(nameFieldList)
+        for item in nameFieldList:
+            nameField = nameField + item + ' '
+        nameField = nameField[:-2]
+    myRow.append(nameField)
     myRow.append(myItem['ab'])
     myRow.append(myItem['r'])
     myRow.append(myItem['h'])
@@ -398,12 +406,17 @@ def create_pitcher_row(myItem):
     myRow.append(myItem['era'])
     return myRow
 
-def build_hitter_list(hitterData,hitterTotals):
+def build_hitter_list(hitterData,hitterTotals,teamPlayers):
     hitterChart = []
     for item in hitterData:
-        hitterRow = create_boxscore_row(item)
+        positionData = ''
+        if item['personId']:
+            playerID = 'ID' + str(item['personId'])
+            positionData = teamPlayers[playerID]['allPositions']
+            #print(positionData)
+        hitterRow = create_boxscore_row(item,positionData)
         hitterChart.append(hitterRow)
-    hitterRow = create_boxscore_row(hitterTotals)
+    hitterRow = create_boxscore_row(hitterTotals,positionData)
     hitterChart.append(hitterRow)
     return tabulate(hitterChart, tablefmt='html', headers="firstrow")
 
@@ -522,6 +535,7 @@ for j in range(0,len(yesterdayGameIDs)):
     #Get the boxscore data and line score.
     data = statsapi.boxscore_data(gameID)
     myLineScore = statsapi.linescore(gameID)
+    #print(data)
 
     #Convert the line score into a text table via tabulate.
     #myLineScoreLOL = parse_text_table(myLineScore)
@@ -533,9 +547,10 @@ for j in range(0,len(yesterdayGameIDs)):
     print("Logging " + away_team + " versus " + home_team)
 
     #All the Road Team Stuff
+    roadPlayers = data['away']['players']
     roadBatters = data['awayBatters']
     roadBattingTotals = data['awayBattingTotals']
-    roadBattingTable = build_hitter_list(roadBatters,roadBattingTotals)
+    roadBattingTable = build_hitter_list(roadBatters,roadBattingTotals,roadPlayers)
     roadBattingTable = append_hitter_notes(roadBattingTable,data['awayBattingNotes'])
     roadBattingTable = add_indent_to_asterisk_cells_in_table(roadBattingTable)
     roadBattingTable = append_other_notes(roadBattingTable,data['away']['info'])
@@ -544,9 +559,10 @@ for j in range(0,len(yesterdayGameIDs)):
     roadPitcherTable = build_pitcher_list(roadPitchers,roadPitchingTotals)
 
     #All the Home Team Stuff
+    homePlayers = data['home']['players']
     homeBatters = data['homeBatters']
     homeBattingTotals = data['homeBattingTotals']
-    homeBattingTable = build_hitter_list(homeBatters,homeBattingTotals)
+    homeBattingTable = build_hitter_list(homeBatters,homeBattingTotals,homePlayers)
     homeBattingTable = append_hitter_notes(homeBattingTable,data['homeBattingNotes'])
     homeBattingTable = add_indent_to_asterisk_cells_in_table(homeBattingTable)
     homeBattingTable = append_other_notes(homeBattingTable,data['home']['info'])
