@@ -4,12 +4,63 @@ from bs4 import BeautifulSoup
 import statsapi
 import copy
 import re
+import pytz
+from datetime import datetime, timedelta
 
 #input today's date here.'
 gameDate = '07/02/2024'
+myTimeZone = 'eastern'
 
 #grab the standings data from the API.
 standingsData = statsapi.standings_data(date=gameDate)
+
+def get_next_day(date_str):
+    # Parse the input date string to a datetime object
+    date_obj = datetime.strptime(date_str, "%m/%d/%Y")
+
+    # Add one day to the date
+    next_day_obj = date_obj + timedelta(days=1)
+
+    # Convert the new date back to a string in the format MM/DD/YYYY
+    next_day_str = next_day_obj.strftime("%m/%d/%Y")
+
+    return next_day_str
+
+def convert_dt_to_timezone(myDT,timezone):
+    zulu_time = datetime.strptime(myDT, "%Y-%m-%dT%H:%M:%SZ")
+    myTZ = pytz.timezone('US/Eastern')
+    if timezone == 'central':
+        myTZ = pytz.timezone('US/Central')
+    elif timezone == 'pacific':
+        myTZ = pytz.timezone('US/Pacific')
+    elif timezone == 'mountain':
+        myTZ = pytz.timezone('US/Mountain')
+    zulu_time_utc = pytz.utc.localize(zulu_time)
+    timeString = zulu_time_utc.astimezone(myTZ).strftime("%I:%M %p")
+    if str(timeString[0]) == '0':
+        return str(timeString[1:])
+    else:
+        return str(timeString)
+
+def write_schedule(mySchedule):
+    myScheduleTable = []
+    myGameList = ["Time", "Game", "Venue", "Road Probable Pitcher", "Home Probable Pitcher"]
+    myScheduleTable.append(myGameList)
+    for item in mySchedule:
+        myGameList = []
+        myGameList.append(convert_dt_to_timezone(item['game_datetime'],myTimeZone))
+        myGameList.append(item['away_name'] + ' at ' + item['home_name'])
+        myGameList.append(item['venue_name'])
+        if item['away_probable_pitcher'] == '':
+            myGameList.append('TBD')
+        else:
+            myGameList.append(item['away_probable_pitcher'])
+        if item['home_probable_pitcher'] == '':
+            myGameList.append('TBD')
+        else:
+            myGameList.append(item['home_probable_pitcher'])
+        myScheduleTable.append(myGameList)
+    return tabulate(myScheduleTable, tablefmt='html', headers="firstrow")
 
 #This function combines two HTML files. We'll use this to build out the list of boxscores.'
 def merge_html(html_base, new_html):
@@ -481,6 +532,12 @@ standingsNL = (build_standings_html_table(standingsDict,"NL"))
 standingsNLHTML = generate_HTML_standings_table(standingsNL)
 print("Logging NL Standings")
 
+nextDay = get_next_day(gameDate)
+todaysSchedule = statsapi.schedule(start_date=nextDay,end_date=nextDay)
+
+print("Logging today's games")
+todaysScheduleTable = write_schedule(todaysSchedule)
+
 #This is the initial HTML template. Note that it will include our style sheet.
 #It also includes the standings tables to start.
 boxScoreHTML = f"""
@@ -519,6 +576,9 @@ boxScoreHTML = f"""
         <table>
         <tr><td class="nested-standings-table">{standingsNLHTML}</td></tr>
         </table>
+        </div>
+        <br>
+        {todaysScheduleTable}
         <br>
         </body>
         </html>
