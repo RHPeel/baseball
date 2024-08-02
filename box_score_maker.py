@@ -8,8 +8,9 @@ import pytz
 from datetime import datetime, timedelta
 
 #input today's date here.'
-gameDate = '07/02/2024'
+gameDate = '07/30/2024'
 myTimeZone = 'eastern'
+metsMode = 0
 
 #grab the standings data from the API.
 standingsData = statsapi.standings_data(date=gameDate)
@@ -513,6 +514,7 @@ def add_game_notes(pitcherTable,boxInfo):
 gameDateOutput = gameDate.replace("/","-")
 outputFileName = 'box_scores-' + gameDateOutput
 yesterdaysGames = statsapi.schedule(date=gameDate, team="", opponent="", sportId=1, game_id=None)
+print(yesterdaysGames)
 yesterdayGameIDs = []
 
 for keys in divisionDict:
@@ -569,6 +571,7 @@ boxScoreHTML = f"""
             </style>
         </head>
         <body>
+        <h2>MLB Standings - {get_next_day(gameDate)}</h2>
         <div class="table-container">
         <table>
         <tr><td class="nested-standings-table">{standingsALHTML}</td></tr>
@@ -578,6 +581,7 @@ boxScoreHTML = f"""
         </table>
         </div>
         <br>
+        <h2>Today's Games</h2>
         {todaysScheduleTable}
         <br>
         </body>
@@ -585,7 +589,11 @@ boxScoreHTML = f"""
         """
 
 for item in yesterdaysGames:
-    yesterdayGameIDs.append(item['game_id'])
+    if metsMode == 1:
+        if item['away_name'] == 'New York Mets' or item['home_name'] == 'New York Mets':
+            yesterdayGameIDs.append(item['game_id'])
+    else:
+        yesterdayGameIDs.append(item['game_id'])
 
 #Loop through all of the game_IDs we just added.
 for j in range(0,len(yesterdayGameIDs)):
